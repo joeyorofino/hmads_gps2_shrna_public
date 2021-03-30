@@ -1,0 +1,18 @@
+configfile: '../config.yaml'
+
+
+#Used l2fcthreshold of .5
+
+rule all:
+	input:
+		deseq2 = expand(config['outs'] + 'verse.{day}.deseq2.lfcthreshold.de.tsv', day=['d0', 'd14'])
+
+rule deseq2:
+	input:
+		input_matrix = config['outs'] + 'raw_verse_matrix_{day}_filtered.tsv'
+	output:
+		norm_counts = config['outs'] + 'norm.{day}.verse_counts.tsv',
+		deseq2 = config['outs'] + 'verse.{day}.deseq2.lfcthreshold.de.tsv'
+	shell:
+		'Rscript run_deseq2.R {input.input_matrix}'
+

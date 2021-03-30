@@ -1,0 +1,46 @@
+configfile: '../config.yaml'
+
+conditions = ['ctl', 'kd']
+times = ['d0', 'd14']
+reps = ['rep1', 'rep2', 'rep3', 'rep4']
+
+rule all:
+	input:
+		multiqc = config['outs'] + 'multiqc_report.html'
+rule fastqc:
+	input:
+		fastq = config['outs'] + '{condition}_{time}_{rep}.fastq'
+	output:
+		fastqc_zip = config['outs'] + '{condition}_{time}_{rep}_fastqc.zip'
+	threads: 8
+	shell:
+		'fastqc {input.fastq} -t {threads}'
+rule trimmomatic:
+	input:
+		fastqc = config['outs'] + '{condition}_{time}_{rep}_fastqc.zip',
+		fastq = config['outs'] + '{condition}_{time}_{rep}.fastq',
+		trim_jar = config['trim_jar'],
+		truseq_fasta = config['truseq_fa']
+	output:
+		read = config['outs'] + '{condition}_{time}_{rep}_trimmed.fastq.gz',
+		logfiles = config['outs'] + '{condition}_{time}_{rep}_trimmomatic.log'
+	log:
+		config['outs'] + '{condition}_{time}_{rep}_trimmomatic.log'
+	threads: 8
+	shell:
+		'java -jar {input.trim_jar} SE '
+		' -threads {threads} '
+		' {input.fastq} '
+		' {output.read} '
+		' ILLUMINACLIP:{input.truseq_fasta}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:40 2> {log} '
+
+rule multiqc:
+	input:
+		trimmed = expand(config['outs'] + '{condition}_{time}_{rep}_trimmomatic.log', condition=conditions, time=times, rep=reps)
+	output:
+		multiqc_report = config['outs'] + 'multiqc_report.html'
+	shell:
+		'export LC_ALL=en_US.utf-8 && '
+		'export LANG=$LC_ALL && '
+		'multiqc -f /projectnb/perissilab/hmads_gps2_shrna/ '
+		'--outdir /projectnb/perissilab/hmads_gps2_shrna '

@@ -1,0 +1,30 @@
+configfile: '../config.yaml'
+
+import pandas
+
+rule all:
+	input:
+		id_mat = expand(config['outs'] + 'verse.{day}.hum-id_to_mus-id.tsv', day=['d0', 'd14']),
+		symbol_mat = expand(config['outs'] + 'verse.{day}.mus-id_to_mgi.tsv', day=['d0', 'd14'])
+
+rule generate_gene_list:
+	input:
+		gene_mat = config['outs'] + 'verse.{day}.deseq2.de.tsv' 
+	output:
+		gene_list = config['outs'] + 'verse.{day}.id_list.tsv'
+	run:
+		ref = pandas.read_csv(input.gene_mat, sep='\t', index_col = 0)
+		ref['index'] = ref.index
+		split_mat = ref['index'].str.split('.', n = 1, expand = True)
+		ref['id_split'] = split_mat[0]
+		ref['id_split'].to_csv(output.gene_list, index=False)
+
+rule convert_gene_list:
+	input:
+		gene_list = config['outs'] + 'verse.{day}.id_list.tsv'
+	output:
+		id_mat = config['outs'] + 'verse.{day}.hum-id_to_mus-id.tsv',
+		symbol_mat = config['outs'] + 'verse.{day}.mus-id_to_mgi.tsv' 
+	shell:
+		'Rscript run_biomart_convert.R {input.gene_list}'
+

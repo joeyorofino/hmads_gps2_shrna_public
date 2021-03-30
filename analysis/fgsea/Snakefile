@@ -1,0 +1,29 @@
+configfile: '../config.yaml'
+
+import pandas
+import numpy 
+gmt_files = ['c2-cp', 'c5-bp', 'c5-mf', 'c3']
+
+ 
+rule all:
+	input:
+		samples = expand(config['outs'] + 'verse.{day}.{msigdb}.log2fc.results.csv', day=['d0', 'd14'], msigdb=gmt_files)
+
+rule make_rank_files:
+	input:
+		gene_mat = config['outs'] + 'verse.{day}.deseq2.de_genenames.tsv'
+	output:
+		rnk_file = config['outs'] + 'verse.{day}.log2fc.rnk'
+	run:
+		mat = pandas.read_csv(input.gene_mat, sep='\t')
+		fc_mat = mat['log2FoldChange'].sort_values(ascending=False)
+		fc_mat.to_csv(output.rnk_file, sep='\t', header=False)	
+
+rule fgsea:	
+	input:
+		rnk_file = config['outs'] + 'verse.{day}.log2fc.rnk',
+		gmt_file = config['outs'] + '{msigdb}.gmt'
+	output:
+		gsea_res = config['outs'] + 'verse.{day}.{msigdb}.log2fc.results.csv'
+	shell:
+		'detk-enrich fgsea {input.gmt_file} {input.rnk_file} -o {output.gsea_res}'	

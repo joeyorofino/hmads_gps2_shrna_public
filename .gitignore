@@ -1,0 +1,6 @@
+.snakemake
+snakejob.*
+.ipynb_checkpoints
+*.swp
+samples
+references

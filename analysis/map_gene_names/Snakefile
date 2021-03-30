@@ -1,0 +1,48 @@
+configfile: '../config.yaml'
+
+import glob
+import re
+import csv
+import os
+
+rule all:
+     input:
+          gene_names = expand(config['outs'] + 'verse.{day}.deseq2.lfcthreshold.de_genenames.tsv', day=['d0', 'd14'])
+
+rule name_mapping:
+     input: 
+          raw_files = config['outs'] + 'verse.{day}.deseq2.lfcthreshold.de.tsv'
+     output:
+          gene_names = config['outs'] + 'verse.{day}.deseq2.lfcthreshold.de_genenames.tsv'
+     run:
+          id_2_name = {}
+
+          genename = r'gene_name\s([^;]*)'
+          geneid = r'gene_id\s([^;]*)'
+
+          with open(config['gtf'], 'r') as r:
+               for line in r:          
+                    if line.startswith('#'): 
+                         continue
+                    else:   
+                         gene_name = re.search(genename, line)
+                         gene_id = re.search(geneid, line)
+                         if gene_id.group().split('"')[1] in id_2_name:
+                              continue                                                           
+                         else:
+                              id_2_name[gene_id.group().split('"')[1]] = gene_name.group().split('"')[1]
+          data = []
+          with open(input.raw_files, 'r') as r:
+               for line in r:
+                    data.append(line.strip())
+
+          gene_name = [line.split('\t') for line in data]
+
+          for row in gene_name:
+               if row[0].startswith('ENS'):
+                    row[0] = id_2_name[row[0]]
+
+          with open(output.gene_names, 'w') as w:
+          	writer = csv.writer(w, delimiter='\t')
+          	writer.writerows(gene_name)
+

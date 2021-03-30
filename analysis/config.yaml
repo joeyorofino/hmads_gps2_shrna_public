@@ -1,0 +1,6 @@
+trim_jar: "/projectnb/perissilab/jorofino/conda_root/envs/hmads_gps2_shrna/share/trimmomatic-0.39-1/trimmomatic.jar"
+truseq_fa: "/projectnb/jorofino/conda_root/envs/hmads_gps2_shrna/share/trimmomatic-0.39-1/adapters/TruSeq3-SE.fa"
+outs: "/projectnb/perissilab/hmads_gps2_shrna/"
+gtf: "/projectnb/perissilab/references/homo_sapiens/gencode_35/gencode.v35.primary_assembly.annotation.gtf"
+star_path: "/projectnb/perissilab/references/homo_sapiens/gencode_35/homo_sapiens_star_index"
+

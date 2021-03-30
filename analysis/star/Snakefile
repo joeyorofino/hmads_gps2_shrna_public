@@ -1,0 +1,110 @@
+configfile: '../config.yaml'
+
+conditions = ['ctl', 'kd']
+times = ['d0', 'd14']
+reps = ['rep1', 'rep2', 'rep3', 'rep4']
+
+import glob
+import os
+import pandas
+
+rule all:
+	input:
+		matrix = expand(config['outs'] + 'raw_verse_matrix_{day}_filtered.tsv', day=['d0', 'd14'])
+rule run_star:
+	input:
+		read = config['outs'] + '{condition}_{time}_{rep}_trimmed.fastq.gz',
+		star_dir = config['star_path']
+	output:
+		config['outs'] + '{condition}_{time}_{rep}.Aligned.sortedByCoord.out.bam'
+	params:
+		prefix = config['outs'] + '{condition}_{time}_{rep}.'
+	threads: 16
+
+	shell:	
+		'STAR --genomeDir {input.star_dir} '
+		' --runThreadN {threads} '
+		' --readFilesIn {input.read} '
+		' --readFilesCommand zcat '
+		' --alignIntronMax 100000 '
+		' --outFilterIntronMotifs RemoveNoncanonicalUnannotated '
+		' --outSAMtype BAM SortedByCoordinate '
+		' --outFileNamePrefix {params.prefix} '
+
+rule index_bam:
+	input:
+		sorted_bam = config['outs'] + '{condition}_{time}_{rep}.Aligned.sortedByCoord.out.bam'
+	output:
+		final_bam_indexes  = config['outs'] + '{condition}_{time}_{rep}.Aligned.sortedByCoord.out.bam.bai'
+	shell:
+		'samtools index -b {input.sorted_bam}'
+
+rule verse:
+	input:
+		final_bams = config['outs'] + '{condition}_{time}_{rep}.Aligned.sortedByCoord.out.bam',
+		final_bam_indexes = config['outs'] + '{condition}_{time}_{rep}.Aligned.sortedByCoord.out.bam.bai',
+		gtf = config['gtf']
+	output:
+		verse_exons = config['outs'] + '{condition}_{time}_{rep}.exon.txt',
+		verse_summaries = config['outs'] + '{condition}_{time}_{rep}.exon.summary.txt'
+	threads: 8
+
+	params: prefix = config['outs'] + '{condition}_{time}_{rep}'
+
+	shell:
+		'verse -T {threads} '
+		' -a {input.gtf} '
+		' -o {params.prefix} '
+		' --singleEnd '
+		' {input.final_bams} '
+
+rule concat_verse_outputs:
+	input:
+		verse_fns = expand(config['outs'] + '{condition}_{time}_{rep}.exon.txt', condition=conditions, time=times, rep=reps)
+	output:
+		output_mat = config['outs'] + 'raw_verse_matrix.tsv'
+	run:
+		verse_outputs = glob.glob(config['outs'] + '*.exon.txt')
+
+		def concat_tsv(filelist):
+			mat = None
+			for fn in sorted(filelist):
+				sample_name = os.path.basename(fn).replace('.exon.txt','')
+				sample_col = sample_name
+				df = pandas.read_csv(fn, sep='\t', skiprows=1, names=['gene_id', sample_col])
+				
+				if mat is None:
+					mat = df
+				else:
+					mat = pandas.concat([mat, df.iloc[:, 1:]], axis=1)
+		
+			mat.to_csv({output.output_mat}, sep='\t', index=False)
+
+		concat_tsv(verse_outputs)
+
+rule split_matrix:
+	input:
+		raw_verse = config['outs'] + 'raw_verse_matrix.tsv'
+	output:
+		d0_verse = config['outs'] + 'raw_verse_matrix_d0.tsv',
+		d14_verse = config['outs'] + 'raw_verse_matrix_d14.tsv'
+	run:
+		mat = pandas.read_csv(input.raw_verse, sep='\t', index_col='gene_id')
+		d0_cols = [col for col in mat.columns if col.split('_')[-2] == 'd0']
+		d14_cols = [col for col in mat.columns if col not in d0_cols]
+		
+
+		d0_mat = mat[d0_cols]
+		d14_mat = mat[d14_cols]
+
+		d0_mat.to_csv(output.d0_verse, sep='\t')
+		d14_mat.to_csv(output.d14_verse, sep='\t')
+
+rule filter_raw_mats:
+	input:
+		raw_verse_mats = config['outs'] + 'raw_verse_matrix_{day}.tsv',
+		col_data = config['outs'] + 'detk_sample_{day}.txt'
+	output:
+		filtered_mats = config['outs'] + 'raw_verse_matrix_{day}_filtered.tsv'
+	shell:
+		'detk-filter "nonzero(condition) > 0.5" -d "\t" -o {output.filtered_mats} {input.raw_verse_mats} {input.col_data}'
